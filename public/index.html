@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistem Kompos</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f5f5f0; --bg2: #ffffff; --bg3: #f0eeea;
+  --border: rgba(0,0,0,0.10); --border2: rgba(0,0,0,0.20);
+  --text: #1a1a1a; --text2: #555; --text3: #999;
+  --green: #1D9E75; --green-light: #E1F5EE; --green-dark: #0F6E56;
+  --amber: #EF9F27; --amber-light: #FAEEDA; --amber-dark: #854F0B;
+  --red: #E24B4A; --red-light: #FCEBEB; --red-dark: #A32D2D;
+  --radius: 8px; --radius-lg: 14px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.view { display: none; } .view.active { display: block; }
+
+.btn { padding: 10px 16px; border-radius: var(--radius); border: 1px solid var(--border2); font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.15s; background: var(--bg2); color: var(--text); font-family: inherit; }
+.btn:hover { background: var(--bg3); }
+.btn:active { transform: scale(0.98); }
+.btn-green { background: var(--green); color: #fff; border-color: var(--green); }
+.btn-green:hover { background: var(--green-dark); border-color: var(--green-dark); }
+.btn-green:disabled { background: #9FE1CB; border-color: #9FE1CB; cursor: not-allowed; transform: none; }
+.btn-danger { color: var(--red-dark); border-color: #F09595; }
+.btn-danger:hover { background: var(--red-light); }
+.btn-sm { padding: 7px 12px; font-size: 13px; }
+.btn-full { width: 100%; justify-content: center; }
+
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+.modal-bg.show { display: flex; }
+.modal { background: var(--bg2); border-radius: var(--radius-lg); padding: 28px; width: 100%; max-width: 380px; border: 1px solid var(--border); }
+.modal-title { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+.modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 22px; }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.field { margin-bottom: 14px; }
+.field label { font-size: 12px; font-weight: 500; color: var(--text2); display: block; margin-bottom: 5px; }
+.field input { width: 100%; padding: 10px 12px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--bg2); color: var(--text); font-size: 14px; font-family: inherit; }
+.field input:focus { outline: none; border-color: var(--green); }
+.err { font-size: 13px; color: var(--red-dark); background: var(--red-light); padding: 9px 12px; border-radius: var(--radius); margin-bottom: 14px; display: none; }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.badge-matang { background: var(--green-light); color: #085041; }
+.badge-belum { background: var(--amber-light); color: var(--amber-dark); }
+
+.slabel { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); margin-bottom: 10px; margin-top: 20px; display: block; }
+.slabel:first-child { margin-top: 0; }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; padding: 10px 20px; border-radius: 999px; font-size: 14px; font-weight: 500; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; z-index: 999; }
+.toast.show { opacity: 1; }
+
+.spin { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin .65s linear infinite; }
+.spin-green { border-color: rgba(29,158,117,0.2); border-top-color: var(--green); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; padding: 32px; color: var(--text3); font-size: 14px; }
+.empty i { font-size: 28px; display: block; margin-bottom: 10px; }
+
+/* ═══ USER VIEW ═══ */
+.user-topbar { display: flex; align-items: center; gap: 10px; padding: 13px 18px; background: var(--bg2); border-bottom: 1px solid var(--border); }
+.topbar-logo { width: 36px; height: 36px; background: var(--green-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--green); flex-shrink: 0; }
+.user-body { max-width: 480px; margin: 0 auto; padding: 20px 16px; }
+
+/* Model loading bar */
+.model-bar { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text2); }
+.model-bar i { color: var(--green); font-size: 16px; flex-shrink: 0; }
+
+/* Status hero */
+.status-hero { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px 20px; text-align: center; margin-bottom: 16px; transition: border-color 0.3s; }
+.status-icon { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; font-size: 36px; transition: all 0.3s; }
+.icon-gray  { background: var(--bg3); color: var(--text3); }
+.icon-green { background: var(--green-light); color: var(--green); }
+.icon-amber { background: var(--amber-light); color: var(--amber-dark); }
+.icon-red   { background: var(--red-light); color: var(--red-dark); }
+.status-title { font-size: 22px; font-weight: 700; margin-bottom: 5px; }
+.status-sub { font-size: 14px; color: var(--text2); line-height: 1.5; }
+
+/* Bukan kompos warning */
+.warn-card { background: var(--red-light); border: 1.5px solid #F09595; border-radius: var(--radius-lg); padding: 18px 16px; margin-top: 14px; display: none; }
+.warn-title { font-size: 15px; font-weight: 600; color: var(--red-dark); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.warn-body { font-size: 13px; color: #7A2020; line-height: 1.65; }
+.warn-detected { font-size: 12px; color: #7A2020; margin-top: 8px; background: rgba(255,255,255,0.5); padding: 6px 10px; border-radius: var(--radius); }
+
+.conf-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+.conf-bg { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.conf-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.result-card { border-radius: var(--radius-lg); padding: 16px; margin-top: 14px; background: var(--bg2); border: 1px solid var(--border); display: none; }
+.ciri-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ciri-pill { font-size: 11px; background: var(--bg3); color: var(--text2); padding: 3px 9px; border-radius: 999px; }
+.preview { width: 100%; max-height: 220px; object-fit: cover; border-radius: var(--radius); margin: 12px 0; border: 1px solid var(--border); display: none; }
+
+.guide-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+.guide-card { border-radius: var(--radius); padding: 14px; }
+
+/* ═══ ADMIN VIEW ═══ */
+.admin-topbar { display: flex; align-items: center; gap: 10px; padding: 13px 18px; background: var(--bg2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+.nav-tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--border); overflow-x: auto; }
+.nav-tabs::-webkit-scrollbar { display: none; }
+.nav-tab { flex: 1; min-width: 72px; padding: 11px 6px; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer; color: var(--text2); border: none; background: none; border-bottom: 2px solid transparent; white-space: nowrap; font-family: inherit; transition: all 0.15s; }
+.nav-tab i { display: block; font-size: 18px; margin-bottom: 3px; }
+.nav-tab.active { color: var(--green); border-bottom-color: var(--green); }
+.panel { display: none; padding: 18px; max-width: 600px; margin: 0 auto; }
+.panel.active { display: block; }
+
+.upload-zone { border: 2px dashed var(--border2); border-radius: var(--radius-lg); padding: 30px 20px; text-align: center; cursor: pointer; background: var(--bg2); transition: all 0.2s; }
+.upload-zone:hover, .upload-zone.drag { border-color: var(--green); background: var(--green-light); }
+.upload-zone i { font-size: 36px; color: var(--green); display: block; margin-bottom: 10px; }
+.upload-zone strong { font-size: 15px; display: block; margin-bottom: 4px; }
+.upload-zone p { font-size: 13px; color: var(--text2); }
+.prog-wrap { height: 4px; background: var(--bg3); border-radius: 2px; margin: 10px 0; overflow: hidden; display: none; }
+.prog-bar { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.3s ease; }
+
+.status-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.status-btn { padding: 16px; border-radius: var(--radius-lg); border: 2px solid var(--border2); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; transition: all 0.15s; background: var(--bg2); font-family: inherit; }
+.status-btn i { font-size: 28px; }
+.status-btn.matang { border-color: var(--green); color: var(--green-dark); background: var(--green-light); }
+.status-btn.belum  { border-color: var(--amber); color: var(--amber-dark); background: var(--amber-light); }
+.status-btn:hover { transform: scale(1.02); }
+.status-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 18px; }
+.stat { background: var(--bg3); border-radius: var(--radius); padding: 12px; text-align: center; }
+.stat-n { font-size: 22px; font-weight: 700; }
+.stat-l { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+.hist-list { display: flex; flex-direction: column; gap: 8px; }
+.hist-item { display: flex; gap: 10px; align-items: center; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.hist-thumb { width: 46px; height: 46px; border-radius: 8px; flex-shrink: 0; background: var(--bg3); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--text3); }
+.hist-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.hist-info { flex: 1; min-width: 0; }
+.hist-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+.export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.export-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 14px; text-align: center; cursor: pointer; transition: all 0.15s; }
+.export-card:hover { border-color: var(--green); background: var(--green-light); }
+.export-card i { font-size: 30px; color: var(--green); display: block; margin-bottom: 8px; }
+.export-card span { font-size: 14px; font-weight: 600; display: block; }
+.export-card small { font-size: 12px; color: var(--text2); margin-top: 3px; display: block; }
+
+canvas#cvs { display: none; }
+</style>
+</head>
+<body>
+<canvas id="cvs"></canvas>
+
+<!-- ═══ USER VIEW ═══ -->
+<div class="view active" id="view-user">
+  <div class="user-topbar">
+    <div class="topbar-logo"><i class="ti ti-leaf"></i></div>
+    <span style="font-size:16px;font-weight:600;flex:1">Sistem Kompos</span>
+    <button class="btn btn-sm" onclick="bukaLoginAdmin()">
+      <i class="ti ti-shield-lock"></i> Admin
+    </button>
+  </div>
+
+  <div class="user-body">
+
+    <!-- Status model AI -->
+    <div class="model-bar" id="modelBar">
+      <span class="spin spin-green" style="width:14px;height:14px;border-width:2px"></span>
+      <span id="modelBarText">Memuatkan model pengesanan... sila tunggu</span>
+    </div>
+
+    <span class="slabel">Imbas Gambar Kompos Anda</span>
+
+    <div class="status-hero" id="statusHero">
+      <div class="status-icon icon-gray" id="scanIcon">
+        <i class="ti ti-plant-2"></i>
+      </div>
+      <p class="status-title" id="scanTitle" style="color:var(--text)">Siap Imbas</p>
+      <p class="status-sub" id="scanSub">Ambil foto kompos untuk semak kematangan</p>
+    </div>
+
+    <input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none" onchange="handleScan(event)">
+    <img id="scanPreview" class="preview">
+
+    <!-- Notifikasi bukan kompos -->
+    <div class="warn-card" id="warnCard">
+      <div class="warn-title">
+        <i class="ti ti-alert-triangle"></i> Bukan Bahan Kompos!
+      </div>
+      <div class="warn-body">
+        Gambar yang diambil <strong>tidak dikenali sebagai bahan kompos</strong>. Sila ambil gambar bahan organik seperti sisa makanan, daun, tanah, atau timbunan kompos.
+      </div>
+      <div class="warn-detected" id="warnDetected"></div>
+    </div>
+
+    <div class="result-card" id="scanResult"></div>
+
+    <button class="btn btn-green btn-full" id="scanBtn" onclick="mulaImbas()" disabled style="margin-top:14px">
+      <i class="ti ti-camera"></i> Ambil Foto & Analisa
+    </button>
+
+    <span class="slabel" style="margin-top:22px">Panduan Kematangan</span>
+    <div class="guide-row">
+      <div class="guide-card" style="background:var(--green-light)">
+        <div style="font-size:12px;font-weight:600;color:#085041;margin-bottom:6px"><i class="ti ti-check"></i> Sudah Matang</div>
+        <div style="font-size:12px;color:#085041;line-height:1.5">Warna gelap, berbau tanah, tekstur halus & seragam.</div>
+      </div>
+      <div class="guide-card" style="background:var(--amber-light)">
+        <div style="font-size:12px;font-weight:600;color:var(--amber-dark);margin-bottom:6px"><i class="ti ti-clock"></i> Belum Matang</div>
+        <div style="font-size:12px;color:var(--amber-dark);line-height:1.5">Warna cerah, bahan asal masih kelihatan.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ADMIN VIEW ═══ -->
+<div class="view" id="view-admin">
+  <div class="admin-topbar">
+    <div class="topbar-logo"><i class="ti ti-leaf"></i></div>
+    <span style="font-size:16px;font-weight:600;flex:1">Panel Admin</span>
+    <span style="font-size:13px;color:var(--text2)" id="adminNama"></span>
+    <button class="btn btn-sm btn-danger" onclick="logoutAdmin()"><i class="ti ti-logout"></i> Keluar</button>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchPanel('upload')" id="ptab-upload"><i class="ti ti-photo-up"></i>Muat Naik</button>
+    <button class="nav-tab" onclick="switchPanel('history')" id="ptab-history"><i class="ti ti-history"></i>Sejarah</button>
+    <button class="nav-tab" onclick="switchPanel('export')" id="ptab-export"><i class="ti ti-file-export"></i>Eksport</button>
+  </div>
+
+  <div class="panel active" id="panel-upload">
+    <span class="slabel">Muat naik gambar kompos</span>
+    <div class="upload-zone" id="uploadZone"
+      onclick="document.getElementById('adminFile').click()"
+      ondragover="ev(event);this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="drop(event)">
+      <i class="ti ti-photo-up"></i>
+      <strong>Klik atau seret gambar ke sini</strong>
+      <p>Format: JPG, PNG, WEBP • Maks 10MB</p>
+    </div>
+    <input type="file" id="adminFile" accept="image/*" style="display:none" onchange="loadAdminFile(event)">
+    <img id="adminPreview" class="preview">
+    <div id="statusBtnWrap" style="display:none">
+      <span class="slabel">Tetapkan status kompos ini</span>
+      <div class="status-btn-row">
+        <button class="status-btn matang" onclick="simpanStatus('SUDAH_MATANG')" id="btnMatang">
+          <i class="ti ti-circle-check"></i>Sudah Matang
+        </button>
+        <button class="status-btn belum" onclick="simpanStatus('BELUM_MATANG')" id="btnBelum">
+          <i class="ti ti-clock"></i>Belum Matang
+        </button>
+      </div>
+    </div>
+    <div class="prog-wrap" id="progWrap"><div class="prog-bar" id="progBar" style="width:0%"></div></div>
+    <div class="result-card" id="adminResult"></div>
+  </div>
+
+  <div class="panel" id="panel-history">
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-n" id="stTotal">0</div><div class="stat-l">Jumlah</div></div>
+      <div class="stat"><div class="stat-n" id="stMatang" style="color:var(--green)">0</div><div class="stat-l">Matang</div></div>
+      <div class="stat"><div class="stat-n" id="stBelum" style="color:var(--amber-dark)">0</div><div class="stat-l">Belum</div></div>
+    </div>
+    <span class="slabel">Rekod gambar kompos</span>
+    <div id="histList"><div class="empty"><i class="ti ti-database"></i>Tiada rekod lagi</div></div>
+  </div>
+
+  <div class="panel" id="panel-export">
+    <span class="slabel">Eksport laporan</span>
+    <div style="background:var(--bg3);border-radius:var(--radius);padding:14px;margin-bottom:4px;font-size:14px;color:var(--text2)">
+      Jumlah rekod: <strong id="expCount" style="color:var(--text)">0</strong>
+    </div>
+    <div class="export-grid">
+      <div class="export-card" onclick="exportCSV()">
+        <i class="ti ti-file-type-csv"></i><span>Eksport CSV</span><small>Buka dengan Excel</small>
+      </div>
+      <div class="export-card" onclick="exportJSON()">
+        <i class="ti ti-file-type-js"></i><span>Eksport JSON</span><small>Data mentah</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LOGIN -->
+<div class="modal-bg" id="modalLogin">
+  <div class="modal">
+    <p class="modal-title"><i class="ti ti-shield-lock" style="color:var(--green)"></i> Log Masuk Admin</p>
+    <p class="modal-sub">Masukkan kelayakan admin anda</p>
+    <div class="err" id="loginErr">Nama pengguna atau kata laluan salah.</div>
+    <div class="field"><label>Nama Pengguna</label><input type="text" id="loginUser" placeholder="admin" autocomplete="off"></div>
+    <div class="field"><label>Kata Laluan</label><input type="password" id="loginPass" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="modal-footer">
+      <button class="btn btn-sm" onclick="tutupModal('modalLogin')">Batal</button>
+      <button class="btn btn-sm btn-green" onclick="doLogin()"><i class="ti ti-login"></i> Log Masuk</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PADAM -->
+<div class="modal-bg" id="modalPadam">
+  <div class="modal">
+    <p class="modal-title">Padam Rekod</p>
+    <p class="modal-sub">Anda pasti mahu memadam rekod ini?</p>
+    <div class="modal-footer">
+      <button class="btn btn-sm" onclick="tutupModal('modalPadam')">Batal</button>
+      <button class="btn btn-sm btn-danger" id="confirmPadam"><i class="ti ti-trash"></i> Padam</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── KATA KUNCI BAHAN KOMPOS (MobileNet labels) ────────────────────
+// Senarai label yang diterima sebagai "bahan kompos"
+const KOMPOS_KEYWORDS = [
+  // Organik umum
+  'soil','dirt','mud','compost','mulch','earth','ground','peat','humus',
+  // Tumbuhan & daun
+  'leaf','leaves','plant','grass','herb','moss','vegetation','foliage',
+  'tree','shrub','flower','garden','lawn','straw','hay','wood','bark',
+  'branch','twig','root','stem','weed','fern','palm',
+  // Sisa makanan
+  'food','fruit','vegetable','banana','apple','orange','mango','papaya',
+  'potato','carrot','onion','tomato','cucumber','lettuce','cabbage',
+  'corn','rice','bread','waste','garbage','organic','kitchen',
+  // Lain-lain organik
+  'manure','fertilizer','biogas','decompose','rot','fungi','mushroom',
+  'pile','heap','bucket','bin','container','farm','agriculture',
+  'nature','natural','green','brown','dark'
+];
+
+// Label yang PASTI bukan kompos
+const BUKAN_KOMPOS_KEYWORDS = [
+  'laptop','computer','phone','mobile','keyboard','mouse','monitor',
+  'television','tv','camera','tablet','screen','device','electronic',
+  'car','vehicle','motorcycle','bicycle','bus','truck','airplane',
+  'person','human','face','hand','body','man','woman','people',
+  'chair','table','furniture','sofa','bed','desk','shelf',
+  'book','pen','pencil','paper','document',
+  'building','house','room','wall','floor','ceiling','door','window',
+  'bottle','cup','glass','plate','spoon','fork','knife',
+  'cat','dog','bird','fish','animal','pet',
+  'shoe','shirt','pants','clothing','bag','wallet',
+  'ball','toy','game','sport'
+];
+
+let mobileNetModel = null;
+let modelReady = false;
+let adminFile = null, adminDataURL = null;
+
+// ── MUATKAN MODEL ─────────────────────────────────────────────────
+async function muatModel() {
+  try {
+    document.getElementById('modelBarText').textContent = 'Memuatkan model pengesanan AI... sila tunggu';
+    mobileNetModel = await mobilenet.load({ version: 2, alpha: 1.0 });
+    modelReady = true;
+    const bar = document.getElementById('modelBar');
+    bar.innerHTML = '<i class="ti ti-circle-check" style="color:var(--green);font-size:16px"></i><span style="color:var(--green);font-weight:500">Model AI bersedia</span>';
+    setTimeout(() => { bar.style.display = 'none'; }, 2000);
+    document.getElementById('scanBtn').disabled = false;
+  } catch(e) {
+    const bar = document.getElementById('modelBar');
+    bar.innerHTML = '<i class="ti ti-wifi-off" style="color:var(--text3);font-size:16px"></i><span style="color:var(--text3)">Tiada internet — pengesanan objek dilumpuhkan</span>';
+    document.getElementById('scanBtn').disabled = false;
+    modelReady = false;
+  }
+}
+
+// ── SEMAK SAMA ADA KOMPOS ─────────────────────────────────────────
+async function semakKompos(imgElement) {
+  if (!modelReady || !mobileNetModel) return { isKompos: true, label: '' };
+
+  const predictions = await mobileNetModel.classify(imgElement, 5);
+  console.log('Predictions:', predictions);
+
+  // Gabungkan semua label jadi satu string untuk semak
+  const allLabels = predictions.map(p => p.className.toLowerCase()).join(' ');
+  const allWords = allLabels.split(/[\s,]+/);
+
+  // Semak bukan kompos dahulu (lebih prioriti)
+  for (const word of allWords) {
+    for (const bukan of BUKAN_KOMPOS_KEYWORDS) {
+      if (word.includes(bukan) || bukan.includes(word)) {
+        return {
+          isKompos: false,
+          label: predictions[0].className,
+          confidence: Math.round(predictions[0].probability * 100)
+        };
+      }
+    }
+  }
+
+  // Semak sama ada ada keyword kompos
+  let adaKompos = false;
+  for (const word of allWords) {
+    for (const kompos of KOMPOS_KEYWORDS) {
+      if (word.includes(kompos) || kompos.includes(word)) {
+        adaKompos = true;
+        break;
+      }
+    }
+    if (adaKompos) break;
+  }
+
+  // Jika tiada keyword langsung, anggap bukan kompos
+  if (!adaKompos) {
+    // Tapi jika keyakinan rendah (<30%), bagi benefit of doubt
+    if (predictions[0].probability < 0.30) {
+      return { isKompos: true, label: predictions[0].className };
+    }
+    return {
+      isKompos: false,
+      label: predictions[0].className,
+      confidence: Math.round(predictions[0].probability * 100)
+    };
+  }
+
+  return { isKompos: true, label: predictions[0].className };
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+window.onload = async () => {
+  muatModel(); // muat model dalam background
+  try {
+    const res = await fetch('/api/admin/check');
+    const data = await res.json();
+    if (data.loggedIn) masukAdminView(data.nama);
+  } catch(e) {}
+};
+
+// ── USER: IMBAS ───────────────────────────────────────────────────
+function mulaImbas() {
+  document.getElementById('scanFile').click();
+}
+
+async function handleScan(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const src = ev.target.result;
+
+    // Reset UI
+    const warnCard = document.getElementById('warnCard');
+    const resultCard = document.getElementById('scanResult');
+    warnCard.style.display = 'none';
+    resultCard.style.display = 'none';
+
+    const previewImg = document.getElementById('scanPreview');
+    previewImg.src = src; previewImg.style.display = 'block';
+
+    const btn = document.getElementById('scanBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Menganalisa...';
+    setScanStatus('loading');
+
+    await new Promise(r => setTimeout(r, 300));
+
+    // ── LANGKAH 1: Semak sama ada kompos ──────────────────────────
+    if (modelReady && mobileNetModel) {
+      setScanStatus('checking');
+      const hasil = await semakKompos(previewImg);
+
+      if (!hasil.isKompos) {
+        // BUKAN KOMPOS — papar amaran
+        setScanStatus('bukan');
+        warnCard.style.display = 'block';
+        document.getElementById('warnDetected').innerHTML =
+          `<i class="ti ti-scan" style="margin-right:4px"></i>Objek dikesan: <strong>${hasil.label}</strong>${hasil.confidence ? ` (${hasil.confidence}% keyakinan)` : ''}`;
+
+        // Simpan rekod imbasan bukan kompos
+        try {
+          await fetch('/api/imbasan', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ result: 'BUKAN_KOMPOS', confidence: hasil.confidence || 0 })
+          });
+        } catch(e) {}
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-camera"></i> Cuba Lagi';
+        document.getElementById('scanFile').value = '';
+        return;
+      }
+    }
+
+    // ── LANGKAH 2: Analisa kematangan kompos ──────────────────────
+    setScanStatus('loading');
+    const result = await analyseImage(src);
+    const isM = result.status === 'SUDAH_MATANG';
+    setScanStatus(isM ? 'matang' : 'belum');
+
+    resultCard.style.borderColor = isM ? '#5DCAA5' : '#EF9F27';
+    resultCard.innerHTML = resultHTML(result);
+    resultCard.style.display = 'block';
+
+    try {
+      await fetch('/api/imbasan', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ result: result.status, confidence: result.confidence })
+      });
+    } catch(e) {}
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-camera"></i> Ambil Foto Lain';
+    document.getElementById('scanFile').value = '';
+  };
+  reader.readAsDataURL(f);
+}
+
+function setScanStatus(state) {
+  const ic = document.getElementById('scanIcon');
+  const ti = document.getElementById('scanTitle');
+  const sb = document.getElementById('scanSub');
+  const hero = document.getElementById('statusHero');
+  hero.style.borderColor = 'var(--border)';
+  if (state === 'loading') {
+    ic.className = 'status-icon icon-gray';
+    ic.innerHTML = '<span class="spin spin-green"></span>';
+    ti.style.color = 'var(--text2)'; ti.textContent = 'Menganalisa...';
+    sb.textContent = 'Sedang memeriksa gambar anda';
+  } else if (state === 'checking') {
+    ic.className = 'status-icon icon-gray';
+    ic.innerHTML = '<span class="spin spin-green"></span>';
+    ti.style.color = 'var(--text2)'; ti.textContent = 'Mengesan objek...';
+    sb.textContent = 'AI sedang mengenal pasti bahan dalam gambar';
+  } else if (state === 'matang') {
+    ic.className = 'status-icon icon-green';
+    ic.innerHTML = '<i class="ti ti-circle-check"></i>';
+    ti.style.color = 'var(--green)'; ti.textContent = 'Sudah Matang';
+    sb.textContent = 'Kompos anda bersedia digunakan!';
+    hero.style.borderColor = '#5DCAA5';
+  } else if (state === 'belum') {
+    ic.className = 'status-icon icon-amber';
+    ic.innerHTML = '<i class="ti ti-clock"></i>';
+    ti.style.color = 'var(--amber-dark)'; ti.textContent = 'Belum Matang';
+    sb.textContent = 'Kompos masih memerlukan lebih masa.';
+    hero.style.borderColor = '#EF9F27';
+  } else if (state === 'bukan') {
+    ic.className = 'status-icon icon-red';
+    ic.innerHTML = '<i class="ti ti-alert-triangle"></i>';
+    ti.style.color = 'var(--red-dark)'; ti.textContent = 'Bukan Bahan Kompos';
+    sb.textContent = 'Sila ambil gambar bahan organik atau kompos.';
+    hero.style.borderColor = '#F09595';
+  } else {
+    ic.className = 'status-icon icon-gray';
+    ic.innerHTML = '<i class="ti ti-plant-2"></i>';
+    ti.style.color = 'var(--text)'; ti.textContent = 'Siap Imbas';
+    sb.textContent = 'Ambil foto kompos untuk semak kematangan';
+  }
+}
+
+// ── ANALISA WARNA TEMPATAN ────────────────────────────────────────
+function analyseImage(dataURL) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.getElementById('cvs');
+      const ctx = canvas.getContext('2d');
+      const S = 100;
+      canvas.width = S; canvas.height = S;
+      ctx.drawImage(img, 0, 0, S, S);
+      const data = ctx.getImageData(0, 0, S, S).data;
+      let tR=0,tG=0,tB=0,dark=0,green=0,brownDark=0;
+      const pc=S*S;
+      for (let i=0;i<data.length;i+=4) {
+        const r=data[i],g=data[i+1],b=data[i+2];
+        tR+=r;tG+=g;tB+=b;
+        const br=r*0.299+g*0.587+b*0.114;
+        if(br<80)dark++;
+        if(g>r*1.1&&g>b*1.1)green++;
+        if(r>b&&r<130&&g<110&&b<90&&br<120)brownDark++;
+      }
+      const aR=Math.round(tR/pc),aG=Math.round(tG/pc),aB=Math.round(tB/pc);
+      const aBr=Math.round(aR*0.299+aG*0.587+aB*0.114);
+      const dR=dark/pc,gR=green/pc,bdR=brownDark/pc;
+      let score=0;
+      if(aBr<60)score+=40;else if(aBr<90)score+=28;else if(aBr<120)score+=15;else if(aBr<150)score+=5;
+      score+=Math.round(dR*30);score+=Math.round(bdR*25);
+      score-=Math.round(gR*35);if(aBr>160)score-=15;
+      score=Math.max(0,Math.min(100,score));
+      const isM=score>=45;
+      const conf=Math.min(95,isM?50+score:50+(100-score));
+      const ciri=[
+        `Kecerahan: ${aBr}/255`,
+        `Piksel gelap: ${Math.round(dR*100)}%`,
+        gR>0.1?`Kehijauan: ${Math.round(gR*100)}%`:null,
+        bdR>0.05?`Coklat gelap: ${Math.round(bdR*100)}%`:null,
+      ].filter(Boolean);
+      let sebab,nasihat;
+      if(isM){
+        sebab=aBr<70?'Warna sangat gelap menunjukkan proses penguraian telah selesai.':'Warna dan kecerahan gambar menunjukkan kompos dalam peringkat matang.';
+        nasihat='Kompos boleh digunakan terus sebagai baja untuk tanaman anda.';
+      } else {
+        sebab=gR>0.15?'Kandungan warna hijau tinggi — bahan organik belum terurai sepenuhnya.':aBr>150?'Warna terlalu cerah, proses penguraian masih awal.':'Ciri warna menunjukkan kompos masih memerlukan lebih masa.';
+        nasihat='Teruskan pengkomposan 2–4 minggu lagi dan pastikan kelembapan mencukupi.';
+      }
+      resolve({status:isM?'SUDAH_MATANG':'BELUM_MATANG',confidence:Math.round(conf),sebab,nasihat,ciri});
+    };
+    img.src=dataURL;
+  });
+}
+
+function resultHTML(r) {
+  const isM=r.status==='SUDAH_MATANG';
+  return `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span class="badge ${isM?'badge-matang':'badge-belum'}">
+        <i class="ti ${isM?'ti-circle-check':'ti-clock'}"></i>
+        ${isM?'Sudah Matang':'Belum Matang'}
+      </span>
+      <span style="margin-left:auto;font-size:12px;color:var(--text3)">${r.confidence}% yakin</span>
+    </div>
+    <div class="conf-row">
+      <div class="conf-bg"><div class="conf-fill" style="width:${r.confidence}%;background:${isM?'var(--green)':'var(--amber)'}"></div></div>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.65">${r.sebab}</p>
+    <p style="font-size:13px;font-weight:500;margin-top:6px;color:${isM?'var(--green-dark)':'var(--amber-dark)'}">${r.nasihat}</p>
+    <div class="ciri-row">${(r.ciri||[]).map(c=>`<span class="ciri-pill">${c}</span>`).join('')}</div>`;
+}
+
+// ── ADMIN: LOGIN ──────────────────────────────────────────────────
+function bukaLoginAdmin() { bukaModal('modalLogin'); }
+async function doLogin() {
+  const u=document.getElementById('loginUser').value.trim();
+  const p=document.getElementById('loginPass').value;
+  const err=document.getElementById('loginErr');
+  err.style.display='none';
+  try {
+    const res=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const data=await res.json();
+    if(data.success){tutupModal('modalLogin');document.getElementById('loginPass').value='';masukAdminView(data.nama);}
+    else{err.textContent=data.error||'Log masuk gagal.';err.style.display='block';}
+  } catch(e){err.textContent='Tidak dapat sambung ke server.';err.style.display='block';}
+}
+function masukAdminView(nama) {
+  document.getElementById('adminNama').textContent=nama;
+  document.getElementById('view-user').classList.remove('active');
+  document.getElementById('view-admin').classList.add('active');
+  loadHistory();loadStats();updateExpCount();
+}
+async function logoutAdmin() {
+  await fetch('/api/admin/logout',{method:'POST'});
+  document.getElementById('view-admin').classList.remove('active');
+  document.getElementById('view-user').classList.add('active');
+  resetUploadAdmin();
+}
+
+// ── ADMIN: UPLOAD ─────────────────────────────────────────────────
+function ev(e){e.preventDefault();}
+function drop(e){
+  e.preventDefault();document.getElementById('uploadZone').classList.remove('drag');
+  const f=e.dataTransfer.files[0];if(f&&f.type.startsWith('image/'))processFile(f);
+}
+function loadAdminFile(e){processFile(e.target.files[0]);}
+function processFile(f){
+  adminFile=f;
+  const r=new FileReader();
+  r.onload=e=>{
+    adminDataURL=e.target.result;
+    const img=document.getElementById('adminPreview');
+    img.src=adminDataURL;img.style.display='block';
+    document.getElementById('statusBtnWrap').style.display='block';
+    document.getElementById('adminResult').style.display='none';
+  };
+  r.readAsDataURL(f);
+}
+async function simpanStatus(status) {
+  if(!adminFile)return;
+  const btnM=document.getElementById('btnMatang');const btnB=document.getElementById('btnBelum');
+  btnM.disabled=true;btnB.disabled=true;
+  const pw=document.getElementById('progWrap');const pb=document.getElementById('progBar');
+  pw.style.display='block';let prog=0;
+  const iv=setInterval(()=>{prog=Math.min(prog+20,90);pb.style.width=prog+'%';},100);
+  try {
+    const fd=new FormData();
+    fd.append('gambar',adminFile);fd.append('status',status);fd.append('confidence',100);
+    fd.append('sebab',status==='SUDAH_MATANG'?'Ditetapkan oleh admin sebagai sudah matang.':'Ditetapkan oleh admin sebagai belum matang.');
+    fd.append('nasihat',status==='SUDAH_MATANG'?'Kompos boleh digunakan terus.':'Teruskan proses pengkomposan.');
+    fd.append('ciri',JSON.stringify([]));
+    const res=await fetch('/api/kompos/upload',{method:'POST',body:fd});
+    const data=await res.json();
+    clearInterval(iv);pb.style.width='100%';
+    setTimeout(()=>{pw.style.display='none';pb.style.width='0%';},400);
+    if(!data.success)throw new Error(data.error||'Upload gagal');
+    const isM=status==='SUDAH_MATANG';
+    const el=document.getElementById('adminResult');
+    el.style.borderColor=isM?'#5DCAA5':'#EF9F27';
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:10px">
+      <span class="badge ${isM?'badge-matang':'badge-belum'}">
+        <i class="ti ${isM?'ti-circle-check':'ti-clock'}"></i>${isM?'Sudah Matang':'Belum Matang'}
+      </span>
+      <span style="font-size:13px;color:var(--text2)">Berjaya disimpan ke database</span>
+    </div>`;
+    el.style.display='block';
+    showToast('✅ Rekod berjaya disimpan');loadStats();resetUploadAdmin();
+  } catch(err) {
+    clearInterval(iv);pw.style.display='none';
+    const el=document.getElementById('adminResult');
+    el.innerHTML=`<p style="color:var(--red-dark);font-size:13px"><i class="ti ti-alert-circle"></i> Ralat: ${err.message}</p>`;
+    el.style.display='block';
+  }
+  btnM.disabled=false;btnB.disabled=false;
+}
+function resetUploadAdmin(){
+  adminFile=null;adminDataURL=null;
+  document.getElementById('adminPreview').style.display='none';
+  document.getElementById('statusBtnWrap').style.display='none';
+  document.getElementById('adminFile').value='';
+}
+
+// ── ADMIN: SEJARAH ────────────────────────────────────────────────
+function switchPanel(id){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('panel-'+id).classList.add('active');
+  document.getElementById('ptab-'+id).classList.add('active');
+  if(id==='history'){loadHistory();loadStats();}
+  if(id==='export')updateExpCount();
+}
+async function loadStats(){
+  try{const res=await fetch('/api/stats');const d=await res.json();
+  document.getElementById('stTotal').textContent=d.total;
+  document.getElementById('stMatang').textContent=d.matang;
+  document.getElementById('stBelum').textContent=d.belum;}catch(e){}
+}
+async function loadHistory(){
+  try{
+    const res=await fetch('/api/kompos');const rekod=await res.json();
+    const el=document.getElementById('histList');
+    if(!rekod.length){el.innerHTML='<div class="empty"><i class="ti ti-database"></i>Tiada rekod lagi</div>';return;}
+    el.innerHTML='<div class="hist-list">'+rekod.map(r=>{
+      const isM=r.status==='SUDAH_MATANG';
+      return `<div class="hist-item">
+        <div class="hist-thumb"><img src="/uploads/${r.filename}" alt="kompos" onerror="this.parentElement.innerHTML='<i class=\\'ti ti-photo\\'></i>'"></div>
+        <div class="hist-info">
+          <div class="hist-name">${r.original_name}</div>
+          <div class="hist-meta">${new Date(r.created_at).toLocaleString('ms-MY')} &bull; ${r.uploaded_by||'Admin'}</div>
+          <span class="badge ${isM?'badge-matang':'badge-belum'}" style="margin-top:4px;font-size:11px">
+            <i class="ti ${isM?'ti-circle-check':'ti-clock'}"></i>${isM?'Sudah Matang':'Belum Matang'}
+          </span>
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="padam(${r.id})"><i class="ti ti-trash"></i></button>
+      </div>`;
+    }).join('')+'</div>';
+  }catch(e){}
+}
+function padam(id){
+  bukaModal('modalPadam');
+  document.getElementById('confirmPadam').onclick=async()=>{
+    try{await fetch('/api/kompos/'+id,{method:'DELETE'});tutupModal('modalPadam');loadHistory();loadStats();updateExpCount();showToast('Rekod dipadam');}
+    catch(e){showToast('Gagal memadam rekod');}
+  };
+}
+async function updateExpCount(){
+  try{const res=await fetch('/api/kompos');const d=await res.json();document.getElementById('expCount').textContent=d.length;}catch(e){}
+}
+function exportCSV(){window.location.href='/api/export/csv';}
+async function exportJSON(){
+  try{const res=await fetch('/api/kompos');const data=await res.json();
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download='data_kompos_'+Date.now()+'.json';a.click();showToast('JSON berjaya dieksport');}
+  catch(e){showToast('Gagal eksport');}
+}
+
+// ── UTILITY ───────────────────────────────────────────────────────
+function bukaModal(id){document.getElementById(id).classList.add('show');}
+function tutupModal(id){document.getElementById(id).classList.remove('show');}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+document.querySelectorAll('.modal-bg').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');});});
+</script>
+</body>
+</html>
