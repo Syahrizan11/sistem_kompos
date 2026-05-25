@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistem Kompos</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --green:#1a7a4a;--green2:#22a35e;--green3:#2dcc76;--green-light:#e8f7ef;--green-dark:#0d5c35;
+  --brown:#6b4c2a;--brown-light:#f5ede3;--cream:#fafaf5;
+  --amber:#d4870a;--amber-light:#fef3e2;
+  --red:#c0392b;--red-light:#fdecea;
+  --text:#1a2e1a;--text2:#4a6741;--text3:#8aaa85;
+  --border:rgba(26,122,74,0.12);--border2:rgba(26,122,74,0.25);
+  --radius:10px;--radius-lg:16px;--radius-xl:24px;
+  --shadow:0 2px 12px rgba(26,122,74,0.08);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--cream);color:var(--text);min-height:100vh}
+.view{display:none}.view.active{display:block}
+
+/* ── NATURE ELEMENTS ── */
+.leaf-bg{position:fixed;top:0;left:0;right:0;height:220px;background:linear-gradient(160deg,#1a7a4a 0%,#22a35e 60%,#2dcc76 100%);z-index:0;overflow:hidden}
+.leaf-bg::before{content:'';position:absolute;bottom:-40px;left:-20px;right:-20px;height:80px;background:var(--cream);border-radius:50% 50% 0 0}
+.leaf-deco{position:absolute;opacity:0.12;font-size:80px;color:white}
+.leaf-deco.l1{top:10px;right:20px;transform:rotate(20deg)}
+.leaf-deco.l2{top:30px;left:10px;transform:rotate(-30deg);font-size:50px}
+.leaf-deco.l3{top:-10px;right:120px;transform:rotate(45deg);font-size:40px}
+
+/* ── TOPBAR ── */
+.topbar{position:relative;z-index:10;display:flex;align-items:center;gap:10px;padding:14px 18px}
+.topbar-logo{width:38px;height:38px;background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.4);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;color:white;backdrop-filter:blur(4px)}
+.topbar-title{font-size:17px;font-weight:600;flex:1;color:white;letter-spacing:0.01em}
+.topbar-sub{font-size:11px;color:rgba(255,255,255,0.75);display:block;font-weight:400}
+.btn-topbar{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:7px 13px;border-radius:999px;font-size:12px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:5px;backdrop-filter:blur(4px);font-family:inherit;transition:all 0.15s}
+.btn-topbar:hover{background:rgba(255,255,255,0.25)}
+
+/* ── BODY ── */
+.body-wrap{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:0 16px 32px}
+
+/* ── HERO STATUS CARD ── */
+.hero-card{background:white;border-radius:var(--radius-xl);padding:28px 20px;text-align:center;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:16px;margin-top:-20px}
+.status-ring{width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:40px;position:relative;transition:all 0.4s}
+.ring-idle{background:linear-gradient(135deg,#e8f7ef,#d0f0e0);color:var(--green);border:3px solid rgba(26,122,74,0.15)}
+.ring-matang{background:linear-gradient(135deg,#e8f7ef,#b8f0d0);color:var(--green);border:3px solid var(--green2)}
+.ring-belum{background:linear-gradient(135deg,var(--amber-light),#fde8b0);color:var(--amber);border:3px solid var(--amber)}
+.ring-bukan{background:linear-gradient(135deg,var(--red-light),#f9c9c5);color:var(--red);border:3px solid var(--red)}
+.ring-loading{background:linear-gradient(135deg,#e8f7ef,#d0f0e0);color:var(--green);border:3px solid var(--green2)}
+.status-title{font-size:22px;font-weight:700;margin-bottom:6px;letter-spacing:-0.01em}
+.status-sub{font-size:14px;color:var(--text2);line-height:1.5}
+
+/* ── SCAN PREVIEW ── */
+.scan-preview{width:100%;max-height:200px;object-fit:cover;border-radius:var(--radius-lg);margin:12px 0;border:2px solid var(--border2);display:none;box-shadow:var(--shadow)}
+
+/* ── RESULT CARD ── */
+.result-card{background:white;border-radius:var(--radius-lg);padding:16px;border:1.5px solid var(--border);display:none;box-shadow:var(--shadow);margin-top:14px}
+.conf-wrap{display:flex;align-items:center;gap:8px;margin:10px 0}
+.conf-track{flex:1;height:7px;background:#e8f7ef;border-radius:999px;overflow:hidden}
+.conf-fill{height:100%;border-radius:999px;transition:width 0.6s ease}
+.ciri-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.ciri-pill{font-size:11px;background:var(--green-light);color:var(--green-dark);padding:3px 10px;border-radius:999px;border:1px solid rgba(26,122,74,0.15)}
+
+/* ── WARN CARD ── */
+.warn-card{background:var(--red-light);border:1.5px solid #f09595;border-radius:var(--radius-lg);padding:16px;margin-top:14px;display:none}
+.warn-title{font-size:14px;font-weight:600;color:var(--red);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.warn-body{font-size:13px;color:#7a2020;line-height:1.65}
+.warn-detected{font-size:12px;color:#7a2020;margin-top:8px;background:rgba(255,255,255,0.5);padding:6px 10px;border-radius:var(--radius)}
+
+/* ── MAIN BUTTON ── */
+.scan-btn{width:100%;padding:15px;background:linear-gradient(135deg,var(--green),var(--green2));color:white;border:none;border-radius:var(--radius-lg);font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;transition:all 0.2s;box-shadow:0 4px 15px rgba(26,122,74,0.25);margin-top:14px;letter-spacing:0.01em}
+.scan-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(26,122,74,0.35)}
+.scan-btn:active{transform:translateY(0)}
+.scan-btn:disabled{background:linear-gradient(135deg,#9FE1CB,#b8f0d0);box-shadow:none;cursor:not-allowed;transform:none}
+
+/* ── MODEL BAR ── */
+.model-bar{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2);box-shadow:var(--shadow)}
+
+/* ── GUIDE CARDS ── */
+.guide-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.guide-card{border-radius:var(--radius-lg);padding:14px;border:1px solid var(--border)}
+.guide-green{background:linear-gradient(135deg,#e8f7ef,#d8f5e8)}
+.guide-amber{background:linear-gradient(135deg,var(--amber-light),#fde8b0)}
+
+/* ── SECTION LABEL ── */
+.slabel{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3);margin-bottom:10px;margin-top:22px;display:block}
+.slabel:first-child{margin-top:0}
+
+/* ── BADGE ── */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600}
+.badge-matang{background:var(--green-light);color:var(--green-dark);border:1px solid rgba(26,122,74,0.2)}
+.badge-belum{background:var(--amber-light);color:#7a4f00;border:1px solid rgba(212,135,10,0.2)}
+
+/* ── SPINNER ── */
+.spin{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin .65s linear infinite}
+.spin-green{border-color:rgba(26,122,74,0.15);border-top-color:var(--green)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green-dark);color:white;padding:10px 20px;border-radius:999px;font-size:14px;font-weight:500;opacity:0;transition:opacity 0.2s;pointer-events:none;white-space:nowrap;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+.toast.show{opacity:1}
+
+/* ── MODAL ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-bg.show{display:flex}
+.modal{background:white;border-radius:var(--radius-xl);padding:28px;width:100%;max-width:380px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,0.15)}
+.modal-icon{width:52px;height:52px;background:var(--green-light);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:var(--green)}
+.modal-title{text-align:center;font-size:18px;font-weight:700;margin-bottom:4px;color:var(--text)}
+.modal-sub{text-align:center;font-size:13px;color:var(--text2);margin-bottom:22px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.field{margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em}
+.field input{width:100%;padding:11px 14px;border:1.5px solid var(--border2);border-radius:var(--radius);background:white;color:var(--text);font-size:14px;font-family:inherit;transition:border-color 0.15s}
+.field input:focus{outline:none;border-color:var(--green)}
+.err{font-size:13px;color:var(--red);background:var(--red-light);padding:9px 12px;border-radius:var(--radius);margin-bottom:14px;display:none;align-items:center;gap:6px}
+
+/* ── BUTTONS ── */
+.btn{padding:10px 16px;border-radius:var(--radius);border:1.5px solid var(--border2);font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;background:white;color:var(--text);font-family:inherit}
+.btn:hover{background:var(--green-light);border-color:var(--green)}
+.btn-green{background:linear-gradient(135deg,var(--green),var(--green2));color:white;border-color:var(--green);box-shadow:0 2px 8px rgba(26,122,74,0.2)}
+.btn-green:hover{box-shadow:0 4px 12px rgba(26,122,74,0.3);transform:translateY(-1px)}
+.btn-green:disabled{background:linear-gradient(135deg,#9FE1CB,#b8f0d0);box-shadow:none;cursor:not-allowed;transform:none}
+.btn-danger{color:var(--red);border-color:#f09595}
+.btn-danger:hover{background:var(--red-light)}
+.btn-sm{padding:7px 14px;font-size:13px}
+.btn-full{width:100%;justify-content:center}
+
+/* ═══ ADMIN VIEW ═══ */
+.admin-leaf-bg{position:fixed;top:0;left:0;right:0;height:180px;background:linear-gradient(160deg,var(--green-dark) 0%,var(--green) 100%);z-index:0;overflow:hidden}
+.admin-topbar{position:relative;z-index:10;display:flex;align-items:center;gap:10px;padding:14px 18px}
+
+.nav-tabs{position:relative;z-index:10;display:flex;background:white;border-bottom:1px solid var(--border);overflow-x:auto;box-shadow:var(--shadow)}
+.nav-tabs::-webkit-scrollbar{display:none}
+.nav-tab{flex:1;min-width:72px;padding:12px 6px;font-size:11px;font-weight:600;text-align:center;cursor:pointer;color:var(--text3);border:none;background:none;border-bottom:2.5px solid transparent;white-space:nowrap;font-family:inherit;transition:all 0.15s;text-transform:uppercase;letter-spacing:0.05em}
+.nav-tab i{display:block;font-size:20px;margin-bottom:3px}
+.nav-tab.active{color:var(--green);border-bottom-color:var(--green)}
+
+.panel{display:none;padding:18px;max-width:600px;margin:0 auto}
+.panel.active{display:block}
+
+/* ── UPLOAD ── */
+.upload-zone{border:2px dashed var(--border2);border-radius:var(--radius-xl);padding:32px 20px;text-align:center;cursor:pointer;background:white;transition:all 0.2s;box-shadow:var(--shadow)}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--green);background:var(--green-light)}
+.upload-zone .uz-icon{width:64px;height:64px;background:var(--green-light);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:28px;color:var(--green)}
+.upload-zone strong{font-size:15px;display:block;margin-bottom:6px;color:var(--text)}
+.upload-zone p{font-size:13px;color:var(--text2)}
+.admin-preview{width:100%;max-height:220px;object-fit:cover;border-radius:var(--radius-lg);margin:14px 0;border:2px solid var(--border2);display:none;box-shadow:var(--shadow)}
+
+.prog-wrap{height:5px;background:var(--green-light);border-radius:999px;margin:10px 0;overflow:hidden;display:none}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--green),var(--green2));border-radius:999px;transition:width 0.3s ease}
+
+/* ── STATUS BUTTONS ── */
+.status-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.status-btn{padding:18px 14px;border-radius:var(--radius-lg);border:2px solid var(--border2);font-size:14px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;transition:all 0.2s;background:white;font-family:inherit;box-shadow:var(--shadow)}
+.status-btn i{font-size:30px}
+.status-btn.matang{border-color:var(--green);color:var(--green-dark);background:linear-gradient(135deg,white,var(--green-light))}
+.status-btn.matang:hover{background:linear-gradient(135deg,var(--green-light),#c0edda);transform:translateY(-2px);box-shadow:0 6px 20px rgba(26,122,74,0.2)}
+.status-btn.belum{border-color:var(--amber);color:#7a4f00;background:linear-gradient(135deg,white,var(--amber-light))}
+.status-btn.belum:hover{background:linear-gradient(135deg,var(--amber-light),#fde0a0);transform:translateY(-2px);box-shadow:0 6px 20px rgba(212,135,10,0.2)}
+.status-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+.stat{background:white;border-radius:var(--radius-lg);padding:14px;text-align:center;border:1px solid var(--border);box-shadow:var(--shadow)}
+.stat-n{font-size:26px;font-weight:700;letter-spacing:-0.02em}
+.stat-l{font-size:11px;color:var(--text3);margin-top:3px;text-transform:uppercase;letter-spacing:0.05em;font-weight:600}
+
+/* ── HISTORY ── */
+.hist-list{display:flex;flex-direction:column;gap:10px}
+.hist-item{display:flex;gap:12px;align-items:center;background:white;border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;box-shadow:var(--shadow)}
+.hist-thumb{width:50px;height:50px;border-radius:10px;flex-shrink:0;background:var(--green-light);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--text3)}
+.hist-thumb img{width:100%;height:100%;object-fit:cover}
+.hist-info{flex:1;min-width:0}
+.hist-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.hist-meta{font-size:11px;color:var(--text3);margin-top:3px}
+
+/* ── EXPORT ── */
+.export-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.export-card{background:white;border:1.5px solid var(--border);border-radius:var(--radius-lg);padding:22px 14px;text-align:center;cursor:pointer;transition:all 0.2s;box-shadow:var(--shadow)}
+.export-card:hover{border-color:var(--green);background:var(--green-light);transform:translateY(-2px)}
+.export-card .ec-icon{width:50px;height:50px;background:var(--green-light);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:22px;color:var(--green)}
+.export-card span{font-size:14px;font-weight:600;display:block;color:var(--text)}
+.export-card small{font-size:12px;color:var(--text2);margin-top:3px;display:block}
+
+/* ── TETAPAN ── */
+.settings-card{background:white;border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;box-shadow:var(--shadow)}
+.info-banner{background:var(--green-light);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--green-dark);display:flex;align-items:center;gap:8px;border:1px solid rgba(26,122,74,0.15)}
+
+.empty{text-align:center;padding:36px;color:var(--text3);font-size:14px}
+.empty i{font-size:32px;display:block;margin-bottom:10px;color:var(--green-light)}
+
+canvas#cvs{display:none}
+</style>
+</head>
+<body>
+<canvas id="cvs"></canvas>
+
+<!-- ═══════════════ USER VIEW ═══════════════ -->
+<div class="view active" id="view-user">
+  <div class="leaf-bg">
+    <i class="ti ti-leaf leaf-deco l1" aria-hidden="true"></i>
+    <i class="ti ti-plant-2 leaf-deco l2" aria-hidden="true"></i>
+    <i class="ti ti-leaf leaf-deco l3" aria-hidden="true"></i>
+  </div>
+
+  <div class="topbar">
+    <div class="topbar-logo"><i class="ti ti-leaf" aria-hidden="true"></i></div>
+    <div style="flex:1">
+      <span class="topbar-title">Sistem Kompos</span>
+      <span class="topbar-sub">Semak kematangan kompos anda</span>
+    </div>
+    <button class="btn-topbar" onclick="bukaLoginAdmin()">
+      <i class="ti ti-shield-lock" aria-hidden="true"></i> Admin
+    </button>
+  </div>
+
+  <div class="body-wrap">
+
+    <div class="model-bar" id="modelBar">
+      <span class="spin spin-green" style="width:14px;height:14px;border-width:2px;flex-shrink:0"></span>
+      <span id="modelBarText">Memuatkan model AI pengesanan...</span>
+    </div>
+
+    <span class="slabel">Status semakan</span>
+
+    <div class="hero-card">
+      <div class="status-ring ring-idle" id="scanIcon">
+        <i class="ti ti-plant-2" aria-hidden="true"></i>
+      </div>
+      <p class="status-title" id="scanTitle" style="color:var(--text)">Siap Imbas</p>
+      <p class="status-sub" id="scanSub">Ambil foto kompos untuk semak kematangan</p>
+    </div>
+
+    <input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none" onchange="handleScan(event)">
+    <img id="scanPreview" class="scan-preview">
+
+    <div class="warn-card" id="warnCard">
+      <div class="warn-title"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Bukan Bahan Kompos!</div>
+      <div class="warn-body">Gambar yang diambil <strong>tidak dikenali sebagai bahan kompos</strong>. Sila ambil gambar bahan organik seperti sisa makanan, daun, tanah, atau timbunan kompos.</div>
+      <div class="warn-detected" id="warnDetected"></div>
+    </div>
+
+    <div class="result-card" id="scanResult"></div>
+
+    <button class="scan-btn" id="scanBtn" onclick="document.getElementById('scanFile').click()" disabled>
+      <i class="ti ti-camera" aria-hidden="true"></i> Ambil Foto & Analisa
+    </button>
+
+    <span class="slabel" style="margin-top:24px">Panduan kematangan</span>
+    <div class="guide-grid">
+      <div class="guide-card guide-green">
+        <div style="font-size:12px;font-weight:700;color:var(--green-dark);margin-bottom:6px;display:flex;align-items:center;gap:5px"><i class="ti ti-circle-check" aria-hidden="true"></i> Sudah Matang</div>
+        <div style="font-size:12px;color:var(--green-dark);line-height:1.6;opacity:0.85">Warna gelap, berbau tanah, tekstur halus & seragam.</div>
+      </div>
+      <div class="guide-card guide-amber">
+        <div style="font-size:12px;font-weight:700;color:#7a4f00;margin-bottom:6px;display:flex;align-items:center;gap:5px"><i class="ti ti-clock" aria-hidden="true"></i> Belum Matang</div>
+        <div style="font-size:12px;color:#7a4f00;line-height:1.6;opacity:0.85">Warna cerah, bahan asal masih kelihatan jelas.</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
+      <i class="ti ti-leaf" aria-hidden="true" style="color:var(--green);font-size:20px"></i>
+      <p style="font-size:11px;color:var(--text3);margin-top:4px">Sistem Kompos &copy; 2024 — Go Green 🌿</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADMIN VIEW ═══════════════ -->
+<div class="view" id="view-admin">
+  <div class="admin-leaf-bg">
+    <i class="ti ti-leaf leaf-deco l1" aria-hidden="true"></i>
+    <i class="ti ti-plant-2 leaf-deco l2" aria-hidden="true"></i>
+  </div>
+  <div class="admin-topbar">
+    <div class="topbar-logo"><i class="ti ti-leaf" aria-hidden="true"></i></div>
+    <div style="flex:1">
+      <span class="topbar-title">Panel Admin</span>
+      <span class="topbar-sub" id="adminNama"></span>
+    </div>
+    <button class="btn-topbar btn-danger-topbar" onclick="logoutAdmin()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:7px 13px;border-radius:999px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit">
+      <i class="ti ti-logout" aria-hidden="true"></i> Keluar
+    </button>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchPanel('upload')" id="ptab-upload"><i class="ti ti-photo-up" aria-hidden="true"></i>Muat Naik</button>
+    <button class="nav-tab" onclick="switchPanel('history')" id="ptab-history"><i class="ti ti-history" aria-hidden="true"></i>Sejarah</button>
+    <button class="nav-tab" onclick="switchPanel('export')" id="ptab-export"><i class="ti ti-file-export" aria-hidden="true"></i>Eksport</button>
+    <button class="nav-tab" onclick="switchPanel('tetapan')" id="ptab-tetapan"><i class="ti ti-settings" aria-hidden="true"></i>Tetapan</button>
+  </div>
+
+  <!-- MUAT NAIK -->
+  <div class="panel active" id="panel-upload">
+    <span class="slabel">Muat naik gambar kompos</span>
+    <div class="upload-zone" id="uploadZone"
+      onclick="document.getElementById('adminFile').click()"
+      ondragover="ev(event);this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="drop(event)">
+      <div class="uz-icon"><i class="ti ti-photo-up" aria-hidden="true"></i></div>
+      <strong>Klik atau seret gambar ke sini</strong>
+      <p>Format: JPG, PNG, WEBP • Maks 5MB</p>
+    </div>
+    <input type="file" id="adminFile" accept="image/*" style="display:none" onchange="loadAdminFile(event)">
+    <img id="adminPreview" class="admin-preview">
+    <div id="statusBtnWrap" style="display:none">
+      <span class="slabel">Tetapkan status kompos ini</span>
+      <div class="status-btn-row">
+        <button class="status-btn matang" onclick="simpanStatus('SUDAH_MATANG')" id="btnMatang">
+          <i class="ti ti-circle-check" aria-hidden="true"></i>Sudah Matang
+        </button>
+        <button class="status-btn belum" onclick="simpanStatus('BELUM_MATANG')" id="btnBelum">
+          <i class="ti ti-clock" aria-hidden="true"></i>Belum Matang
+        </button>
+      </div>
+    </div>
+    <div class="prog-wrap" id="progWrap"><div class="prog-bar" id="progBar" style="width:0%"></div></div>
+    <div class="result-card" id="adminResult"></div>
+  </div>
+
+  <!-- SEJARAH -->
+  <div class="panel" id="panel-history">
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-n" id="stTotal" style="color:var(--green)">0</div><div class="stat-l">Jumlah</div></div>
+      <div class="stat"><div class="stat-n" id="stMatang" style="color:var(--green-dark)">0</div><div class="stat-l">Matang</div></div>
+      <div class="stat"><div class="stat-n" id="stBelum" style="color:var(--amber)">0</div><div class="stat-l">Belum</div></div>
+    </div>
+    <span class="slabel">Rekod gambar kompos</span>
+    <div id="histList"><div class="empty"><i class="ti ti-database" aria-hidden="true"></i>Tiada rekod lagi</div></div>
+  </div>
+
+  <!-- EKSPORT -->
+  <div class="panel" id="panel-export">
+    <span class="slabel">Eksport laporan</span>
+    <div style="background:white;border-radius:var(--radius-lg);padding:14px;margin-bottom:4px;font-size:14px;color:var(--text2);border:1px solid var(--border);box-shadow:var(--shadow)">
+      Jumlah rekod: <strong id="expCount" style="color:var(--text)">0</strong>
+    </div>
+    <div class="export-grid">
+      <div class="export-card" onclick="exportCSV()">
+        <div class="ec-icon"><i class="ti ti-file-type-csv" aria-hidden="true"></i></div>
+        <span>Eksport CSV</span><small>Buka dengan Excel</small>
+      </div>
+      <div class="export-card" onclick="exportJSON()">
+        <div class="ec-icon"><i class="ti ti-file-type-js" aria-hidden="true"></i></div>
+        <span>Eksport JSON</span><small>Data mentah</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- TETAPAN -->
+  <div class="panel" id="panel-tetapan">
+    <span class="slabel">Tukar kata laluan admin</span>
+    <div class="settings-card">
+      <div class="info-banner"><i class="ti ti-info-circle" aria-hidden="true"></i>Kata laluan mestilah sekurang-kurangnya 6 aksara.</div>
+      <div class="err" id="passErr"></div>
+      <div class="field"><label>Kata Laluan Semasa</label><input type="password" id="passLama" placeholder="••••••"></div>
+      <div class="field"><label>Kata Laluan Baru</label><input type="password" id="passBaru" placeholder="••••••"></div>
+      <div class="field"><label>Sahkan Kata Laluan Baru</label><input type="password" id="passSahkan" placeholder="••••••" onkeydown="if(event.key==='Enter')tukarPassword()"></div>
+      <button class="btn btn-green btn-full" onclick="tukarPassword()" id="passBtn" style="padding:13px">
+        <i class="ti ti-lock" aria-hidden="true"></i> Tukar Kata Laluan
+      </button>
+      <div id="passOk" style="display:none;margin-top:12px;background:var(--green-light);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:var(--green-dark);align-items:center;gap:8px;border:1px solid rgba(26,122,74,0.15)">
+        <i class="ti ti-circle-check" aria-hidden="true"></i> Kata laluan berjaya ditukar! Log masuk semula...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LOGIN -->
+<div class="modal-bg" id="modalLogin">
+  <div class="modal">
+    <div class="modal-icon"><i class="ti ti-shield-lock" aria-hidden="true"></i></div>
+    <p class="modal-title">Log Masuk Admin</p>
+    <p class="modal-sub">Masukkan kelayakan admin anda</p>
+    <div class="err" id="loginErr"><i class="ti ti-alert-circle" aria-hidden="true"></i> Nama pengguna atau kata laluan salah.</div>
+    <div class="field"><label>Nama Pengguna</label><input type="text" id="loginUser" placeholder="admin" autocomplete="off"></div>
+    <div class="field"><label>Kata Laluan</label><input type="password" id="loginPass" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn btn-green btn-full" onclick="doLogin()" style="padding:13px;margin-bottom:10px">
+      <i class="ti ti-login" aria-hidden="true"></i> Log Masuk
+    </button>
+    <button class="btn btn-full" onclick="tutupModal('modalLogin')" style="padding:11px">Batal</button>
+  </div>
+</div>
+
+<!-- MODAL PADAM -->
+<div class="modal-bg" id="modalPadam">
+  <div class="modal">
+    <div class="modal-icon" style="background:var(--red-light);color:var(--red)"><i class="ti ti-trash" aria-hidden="true"></i></div>
+    <p class="modal-title">Padam Rekod?</p>
+    <p class="modal-sub">Tindakan ini tidak boleh dibatalkan. Gambar dan data akan dipadam sepenuhnya.</p>
+    <div class="modal-footer">
+      <button class="btn btn-sm" onclick="tutupModal('modalPadam')">Batal</button>
+      <button class="btn btn-sm btn-danger" id="confirmPadam"><i class="ti ti-trash" aria-hidden="true"></i> Ya, Padam</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── SENARAI PUTIH: MESTI ada sekurang-kurangnya satu untuk lulus ──
+const KOMPOS_MUST = ['soil','dirt','mud','compost','mulch','earth','ground','peat','humus','leaf','leaves','plant','grass','herb','moss','vegetation','foliage','straw','hay','bark','twig','root','stem','weed','fern','fungus','fungi','mushroom','manure','fertilizer','decompose','rot','mold','mould','organic','pile','heap','sludge','bog','swamp','compost','topsoil','loam','turf','sod'];
+// ── SENARAI ABU-ABU: Bahan makanan organik (boleh lulus tapi perlu threshold tinggi) ──
+const KOMPOS_FOOD = ['banana','apple','orange','mango','papaya','potato','carrot','onion','tomato','cucumber','lettuce','cabbage','corn','rice','bread','fruit','vegetable','food','kitchen','waste','garbage','peel','skin','seed','grain'];
+// ── SENARAI HITAM: TERUS tolak jika dikesan ──
+const BUKAN_KOMPOS=[
+  // Elektronik & teknologi
+  'laptop','computer','phone','mobile','keyboard','mouse','monitor','television','tv','camera','tablet','screen','device','electronic','remote','cable','wire','charger','headphone','speaker','printer','router','hard disk','usb','circuit','battery',
+  // Alat tulis & pejabat
+  'ruler','scale','pencil','pen','eraser','stapler','tape','scissors','clip','marker','highlighter','notebook','book','paper','document','envelope','stamp',
+  // Kenderaan
+  'car','vehicle','motorcycle','bicycle','bus','truck','airplane','boat','ship','train','engine','wheel','tire',
+  // Manusia & pakaian
+  'person','human','face','hand','body','man','woman','people','child','baby','finger','arm','leg','shoe','shirt','pants','dress','clothing','bag','wallet','hat','glasses','watch','ring','necklace',
+  // Perabot & bangunan
+  'chair','table','furniture','sofa','bed','desk','shelf','cupboard','building','house','room','wall','floor','ceiling','door','window','stairs','bridge','road','street',
+  // Barangan dapur bukan organik
+  'bottle','cup','glass','plate','bowl','spoon','fork','knife','pan','pot','mug','jar','can','tin','wrapper','plastic','metal','steel','iron','aluminum',
+  // Haiwan
+  'cat','dog','bird','fish','animal','pet','cow','horse','sheep','goat','rabbit','hamster','snake','lizard','insect','bee','ant','fly',
+  // Sukan & mainan
+  'ball','toy','game','sport','racket','bat','goal','court','field','pool',
+  // Lain-lain
+  'money','coin','card','key','lock','gun','knife','sword','tool','hammer','drill','saw','nail','screw','paint','brush','canvas','mirror','clock','lamp','light','bulb','candle'
+];
+
+let mobileNetModel=null,modelReady=false;
+let adminFile=null,adminDataURL=null;
+
+async function muatModel(){
+  try{
+    mobileNetModel=await mobilenet.load({version:2,alpha:1.0});
+    modelReady=true;
+    const bar=document.getElementById('modelBar');
+    bar.innerHTML='<i class="ti ti-circle-check" style="color:var(--green);font-size:16px;flex-shrink:0"></i><span style="color:var(--green);font-weight:500">Model AI bersedia — boleh mula imbas</span>';
+    setTimeout(()=>{bar.style.display='none';},2000);
+    document.getElementById('scanBtn').disabled=false;
+  }catch(e){
+    const bar=document.getElementById('modelBar');
+    bar.innerHTML='<i class="ti ti-wifi-off" style="color:var(--text3);font-size:16px;flex-shrink:0"></i><span style="color:var(--text3)">Pengesanan objek dilumpuhkan (tiada internet)</span>';
+    document.getElementById('scanBtn').disabled=false;
+  }
+}
+
+window.onload=async()=>{
+  muatModel();
+  try{const res=await fetch('/api/admin/check');const d=await res.json();if(d.loggedIn)masukAdminView(d.nama);}catch(e){}
+};
+
+async function semakKompos(imgEl){
+  if(!modelReady||!mobileNetModel)return{isKompos:true,label:'',sebab:''};
+
+  // Ambil 10 predictions untuk lebih tepat
+  const preds=await mobileNetModel.classify(imgEl,10);
+  console.log('Predictions:',preds);
+
+  // Gabungkan semua label
+  const allLabels=preds.map(p=>p.className.toLowerCase());
+  const allText=allLabels.join(' ');
+  const allWords=allText.split(/[\s,]+/).filter(w=>w.length>2);
+
+  // ── SEMAK SENARAI HITAM DAHULU ──────────────────────────────
+  // Jika mana-mana prediction ada dalam senarai hitam dengan keyakinan >15%
+  for(const pred of preds){
+    if(pred.probability<0.10)continue;
+    const words=pred.className.toLowerCase().split(/[\s,]+/);
+    for(const w of words){
+      for(const b of BUKAN_KOMPOS){
+        if(w===b||w.includes(b)||b.includes(w)){
+          return{
+            isKompos:false,
+            label:pred.className,
+            confidence:Math.round(pred.probability*100),
+            sebab:`Dikesan sebagai: "${pred.className}"`
+          };
+        }
+      }
+    }
+  }
+
+  // ── SEMAK SENARAI PUTIH (MESTI ADA) ─────────────────────────
+  let adaMust=false,mustLabel='';
+  for(const w of allWords){
+    for(const k of KOMPOS_MUST){
+      if(w===k||w.includes(k)||k.includes(w)){
+        adaMust=true;mustLabel=w;break;
+      }
+    }
+    if(adaMust)break;
+  }
+
+  // ── SEMAK SENARAI MAKANAN ORGANIK ────────────────────────────
+  let adaFood=false;
+  if(!adaMust){
+    for(const w of allWords){
+      for(const f of KOMPOS_FOOD){
+        if(w===f||w.includes(f)||f.includes(w)){
+          adaFood=true;break;
+        }
+      }
+      if(adaFood)break;
+    }
+  }
+
+  // ── KEPUTUSAN AKHIR ──────────────────────────────────────────
+  const topConf=preds[0].probability;
+
+  if(adaMust){
+    // Ada keyword kompos jelas — lulus
+    return{isKompos:true,label:preds[0].className,sebab:mustLabel};
+  }else if(adaFood&&topConf<0.60){
+    // Ada bahan makanan tapi keyakinan tidak terlalu tinggi — lulus (mungkin sisa makanan)
+    return{isKompos:true,label:preds[0].className,sebab:'sisa organik'};
+  }else if(!adaMust&&!adaFood){
+    // Tiada keyword langsung — tolak
+    return{
+      isKompos:false,
+      label:preds[0].className,
+      confidence:Math.round(topConf*100),
+      sebab:`Tiada ciri bahan kompos dikesan. Objek dikesan: "${preds[0].className}"`
+    };
+  }else{
+    // Makanan tapi keyakinan sangat tinggi — anggap bukan konteks kompos
+    return{
+      isKompos:false,
+      label:preds[0].className,
+      confidence:Math.round(topConf*100),
+      sebab:`Objek dikesan: "${preds[0].className}"`
+    };
+  }
+}
+
+async function handleScan(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=async ev=>{
+    const src=ev.target.result;
+    document.getElementById('warnCard').style.display='none';
+    document.getElementById('scanResult').style.display='none';
+    const prev=document.getElementById('scanPreview');prev.src=src;prev.style.display='block';
+    const btn=document.getElementById('scanBtn');btn.disabled=true;btn.innerHTML='<span class="spin"></span> Menganalisa...';
+    setScanStatus('checking');
+    await new Promise(r=>setTimeout(r,300));
+    if(modelReady&&mobileNetModel){
+      const hasil=await semakKompos(prev);
+      if(!hasil.isKompos){
+        setScanStatus('bukan');
+        const wc=document.getElementById('warnCard');wc.style.display='block';
+        document.getElementById('warnDetected').innerHTML='<i class="ti ti-scan" style="margin-right:4px"></i>'+hasil.sebab+(hasil.confidence?' ('+hasil.confidence+'% keyakinan)':'');
+        try{await fetch('/api/imbasan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result:'BUKAN_KOMPOS',confidence:hasil.confidence||0})});}catch(e){}
+        btn.disabled=false;btn.innerHTML='<i class="ti ti-camera"></i> Cuba Lagi';
+        document.getElementById('scanFile').value='';return;
+      }
+    }
+    setScanStatus('loading');
+    const result=await analyseImage(src);
+    const isM=result.status==='SUDAH_MATANG';
+    setScanStatus(isM?'matang':'belum');
+    const el=document.getElementById('scanResult');
+    el.style.borderColor=isM?'rgba(26,122,74,0.3)':'rgba(212,135,10,0.3)';
+    el.innerHTML=resultHTML(result);el.style.display='block';
+    try{await fetch('/api/imbasan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result:result.status,confidence:result.confidence})});}catch(e){}
+    btn.disabled=false;btn.innerHTML='<i class="ti ti-camera"></i> Ambil Foto Lain';
+    document.getElementById('scanFile').value='';
+  };
+  r.readAsDataURL(f);
+}
+
+function setScanStatus(s){
+  const ic=document.getElementById('scanIcon'),ti=document.getElementById('scanTitle'),sb=document.getElementById('scanSub');
+  if(s==='loading'||s==='checking'){
+    ic.className='status-ring ring-loading';ic.innerHTML='<span class="spin spin-green"></span>';
+    ti.style.color='var(--text2)';ti.textContent=s==='checking'?'Mengesan objek...':'Menganalisa...';
+    sb.textContent=s==='checking'?'AI sedang mengenal pasti bahan dalam gambar':'Sedang memeriksa warna dan ciri kompos';
+  }else if(s==='matang'){
+    ic.className='status-ring ring-matang';ic.innerHTML='<i class="ti ti-circle-check"></i>';
+    ti.style.color='var(--green)';ti.textContent='Sudah Matang';sb.textContent='Kompos anda bersedia digunakan! 🌱';
+  }else if(s==='belum'){
+    ic.className='status-ring ring-belum';ic.innerHTML='<i class="ti ti-clock"></i>';
+    ti.style.color='var(--amber)';ti.textContent='Belum Matang';sb.textContent='Kompos masih memerlukan lebih masa.';
+  }else if(s==='bukan'){
+    ic.className='status-ring ring-bukan';ic.innerHTML='<i class="ti ti-alert-triangle"></i>';
+    ti.style.color='var(--red)';ti.textContent='Bukan Bahan Kompos';sb.textContent='Sila ambil gambar bahan organik atau kompos.';
+  }else{
+    ic.className='status-ring ring-idle';ic.innerHTML='<i class="ti ti-plant-2"></i>';
+    ti.style.color='var(--text)';ti.textContent='Siap Imbas';sb.textContent='Ambil foto kompos untuk semak kematangan';
+  }
+}
+
+function analyseImage(dataURL){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const cv=document.getElementById('cvs'),ctx=cv.getContext('2d'),S=100;
+      cv.width=S;cv.height=S;ctx.drawImage(img,0,0,S,S);
+      const data=ctx.getImageData(0,0,S,S).data;
+      let tR=0,tG=0,tB=0,dark=0,green=0,bd=0;const pc=S*S;
+      for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],b=data[i+2];tR+=r;tG+=g;tB+=b;const br=r*0.299+g*0.587+b*0.114;if(br<80)dark++;if(g>r*1.1&&g>b*1.1)green++;if(r>b&&r<130&&g<110&&b<90&&br<120)bd++;}
+      const aR=Math.round(tR/pc),aG=Math.round(tG/pc),aB=Math.round(tB/pc),aBr=Math.round(aR*0.299+aG*0.587+aB*0.114);
+      const dR=dark/pc,gR=green/pc,bdR=bd/pc;
+      let score=0;
+      if(aBr<60)score+=40;else if(aBr<90)score+=28;else if(aBr<120)score+=15;else if(aBr<150)score+=5;
+      score+=Math.round(dR*30);score+=Math.round(bdR*25);score-=Math.round(gR*35);if(aBr>160)score-=15;
+      score=Math.max(0,Math.min(100,score));
+      const isM=score>=45,conf=Math.min(95,isM?50+score:50+(100-score));
+      const ciri=[`Kecerahan: ${aBr}/255`,`Piksel gelap: ${Math.round(dR*100)}%`,gR>0.1?`Kehijauan: ${Math.round(gR*100)}%`:null,bdR>0.05?`Coklat gelap: ${Math.round(bdR*100)}%`:null].filter(Boolean);
+      let sebab,nasihat;
+      if(isM){sebab=aBr<70?'Warna sangat gelap menunjukkan proses penguraian telah selesai.':'Warna dan kecerahan menunjukkan kompos dalam peringkat matang.';nasihat='Kompos boleh digunakan terus sebagai baja untuk tanaman anda.';}
+      else{sebab=gR>0.15?'Kandungan hijau tinggi — bahan organik belum terurai sepenuhnya.':aBr>150?'Warna terlalu cerah, proses penguraian masih awal.':'Ciri warna menunjukkan kompos masih memerlukan lebih masa.';nasihat='Teruskan pengkomposan 2–4 minggu lagi dan pastikan kelembapan mencukupi.';}
+      resolve({status:isM?'SUDAH_MATANG':'BELUM_MATANG',confidence:Math.round(conf),sebab,nasihat,ciri});
+    };
+    img.src=dataURL;
+  });
+}
+
+function resultHTML(r){
+  const isM=r.status==='SUDAH_MATANG';
+  return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <span class="badge ${isM?'badge-matang':'badge-belum'}"><i class="ti ${isM?'ti-circle-check':'ti-clock'}"></i>${isM?'Sudah Matang':'Belum Matang'}</span>
+    <span style="margin-left:auto;font-size:12px;color:var(--text3)">${r.confidence}% yakin</span>
+  </div>
+  <div class="conf-wrap"><div class="conf-track"><div class="conf-fill" style="width:${r.confidence}%;background:${isM?'linear-gradient(90deg,var(--green),var(--green2))':'linear-gradient(90deg,var(--amber),#f0a820)'}"></div></div></div>
+  <p style="font-size:13px;color:var(--text2);margin-top:10px;line-height:1.65">${r.sebab}</p>
+  <p style="font-size:13px;font-weight:600;margin-top:7px;color:${isM?'var(--green-dark)':'var(--amber)'}">${r.nasihat}</p>
+  <div class="ciri-wrap">${(r.ciri||[]).map(c=>`<span class="ciri-pill">${c}</span>`).join('')}</div>`;
+}
+
+function bukaLoginAdmin(){bukaModal('modalLogin');}
+async function doLogin(){
+  const u=document.getElementById('loginUser').value.trim(),p=document.getElementById('loginPass').value;
+  const err=document.getElementById('loginErr');err.style.display='none';
+  try{
+    const res=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await res.json();
+    if(d.success){tutupModal('modalLogin');document.getElementById('loginPass').value='';masukAdminView(d.nama);}
+    else{err.textContent=d.error||'Log masuk gagal.';err.style.display='flex';}
+  }catch(e){err.textContent='Tidak dapat sambung ke server.';err.style.display='flex';}
+}
+function masukAdminView(nama){
+  document.getElementById('adminNama').textContent=nama;
+  document.getElementById('view-user').classList.remove('active');
+  document.getElementById('view-admin').classList.add('active');
+  loadHistory();loadStats();updateExpCount();
+}
+async function logoutAdmin(){
+  await fetch('/api/admin/logout',{method:'POST'});
+  document.getElementById('view-admin').classList.remove('active');
+  document.getElementById('view-user').classList.add('active');
+  resetUpload();
+}
+
+function switchPanel(id){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('panel-'+id).classList.add('active');
+  document.getElementById('ptab-'+id).classList.add('active');
+  if(id==='history'){loadHistory();loadStats();}
+  if(id==='export')updateExpCount();
+}
+
+function ev(e){e.preventDefault();}
+function drop(e){e.preventDefault();document.getElementById('uploadZone').classList.remove('drag');const f=e.dataTransfer.files[0];if(f&&f.type.startsWith('image/'))processFile(f);}
+function loadAdminFile(e){processFile(e.target.files[0]);}
+function processFile(f){
+  adminFile=f;const r=new FileReader();
+  r.onload=e=>{adminDataURL=e.target.result;const img=document.getElementById('adminPreview');img.src=adminDataURL;img.style.display='block';document.getElementById('statusBtnWrap').style.display='block';document.getElementById('adminResult').style.display='none';};
+  r.readAsDataURL(f);
+}
+async function simpanStatus(status){
+  if(!adminFile)return;
+  const bM=document.getElementById('btnMatang'),bB=document.getElementById('btnBelum');bM.disabled=true;bB.disabled=true;
+  const pw=document.getElementById('progWrap'),pb=document.getElementById('progBar');pw.style.display='block';
+  let prog=0;const iv=setInterval(()=>{prog=Math.min(prog+20,90);pb.style.width=prog+'%';},100);
+  try{
+    const fd=new FormData();fd.append('gambar',adminFile);fd.append('status',status);fd.append('confidence',100);
+    fd.append('sebab',status==='SUDAH_MATANG'?'Ditetapkan oleh admin sebagai sudah matang.':'Ditetapkan oleh admin sebagai belum matang.');
+    fd.append('nasihat',status==='SUDAH_MATANG'?'Kompos boleh digunakan terus.':'Teruskan proses pengkomposan.');
+    fd.append('ciri',JSON.stringify([]));
+    const res=await fetch('/api/kompos/upload',{method:'POST',body:fd});const d=await res.json();
+    clearInterval(iv);pb.style.width='100%';setTimeout(()=>{pw.style.display='none';pb.style.width='0%';},400);
+    if(!d.success)throw new Error(d.error||'Upload gagal');
+    const isM=status==='SUDAH_MATANG';
+    const el=document.getElementById('adminResult');
+    el.style.borderColor=isM?'rgba(26,122,74,0.3)':'rgba(212,135,10,0.3)';
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:10px"><span class="badge ${isM?'badge-matang':'badge-belum'}"><i class="ti ${isM?'ti-circle-check':'ti-clock'}"></i>${isM?'Sudah Matang':'Belum Matang'}</span><span style="font-size:13px;color:var(--text2)">Berjaya disimpan ke database ✓</span></div>`;
+    el.style.display='block';showToast('✅ Rekod berjaya disimpan');loadStats();resetUpload();
+  }catch(err){
+    clearInterval(iv);pw.style.display='none';
+    const el=document.getElementById('adminResult');el.innerHTML=`<p style="color:var(--red);font-size:13px"><i class="ti ti-alert-circle"></i> Ralat: ${err.message}</p>`;el.style.display='block';
+  }
+  bM.disabled=false;bB.disabled=false;
+}
+function resetUpload(){adminFile=null;adminDataURL=null;document.getElementById('adminPreview').style.display='none';document.getElementById('statusBtnWrap').style.display='none';document.getElementById('adminFile').value='';}
+
+async function loadStats(){
+  try{const d=await(await fetch('/api/stats')).json();document.getElementById('stTotal').textContent=d.total;document.getElementById('stMatang').textContent=d.matang;document.getElementById('stBelum').textContent=d.belum;}catch(e){}
+}
+async function loadHistory(){
+  try{
+    const rekod=await(await fetch('/api/kompos')).json();
+    const el=document.getElementById('histList');
+    if(!rekod.length){el.innerHTML='<div class="empty"><i class="ti ti-database"></i>Tiada rekod lagi</div>';return;}
+    el.innerHTML='<div class="hist-list">'+rekod.map(r=>{
+      const isM=r.status==='SUDAH_MATANG';
+      return`<div class="hist-item">
+        <div class="hist-thumb"><img src="${r.filename}" alt="kompos" onerror="this.parentElement.innerHTML='<i class=\\'ti ti-photo\\'></i>'"></div>
+        <div class="hist-info">
+          <div class="hist-name">${r.original_name}</div>
+          <div class="hist-meta">${new Date(r.created_at).toLocaleString('ms-MY')} &bull; ${r.uploaded_by||'Admin'}</div>
+          <span class="badge ${isM?'badge-matang':'badge-belum'}" style="margin-top:5px;font-size:11px"><i class="ti ${isM?'ti-circle-check':'ti-clock'}"></i>${isM?'Sudah Matang':'Belum Matang'}</span>
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="padam(${r.id})"><i class="ti ti-trash"></i></button>
+      </div>`;
+    }).join('')+'</div>';
+  }catch(e){}
+}
+function padam(id){
+  bukaModal('modalPadam');
+  document.getElementById('confirmPadam').onclick=async()=>{
+    try{await fetch('/api/kompos/'+id,{method:'DELETE'});tutupModal('modalPadam');loadHistory();loadStats();updateExpCount();showToast('Rekod dipadam');}
+    catch(e){showToast('Gagal memadam rekod');}
+  };
+}
+async function updateExpCount(){try{const d=await(await fetch('/api/kompos')).json();document.getElementById('expCount').textContent=d.length;}catch(e){}}
+function exportCSV(){window.location.href='/api/export/csv';}
+async function exportJSON(){
+  try{const d=await(await fetch('/api/kompos')).json();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));a.download='data_kompos_'+Date.now()+'.json';a.click();showToast('JSON berjaya dieksport');}
+  catch(e){showToast('Gagal eksport');}
+}
+
+async function tukarPassword(){
+  const lama=document.getElementById('passLama').value,baru=document.getElementById('passBaru').value,sahkan=document.getElementById('passSahkan').value;
+  const err=document.getElementById('passErr'),ok=document.getElementById('passOk'),btn=document.getElementById('passBtn');
+  err.style.display='none';ok.style.display='none';
+  if(!lama||!baru||!sahkan){err.textContent='Semua medan wajib diisi.';err.style.display='flex';return;}
+  if(baru!==sahkan){err.textContent='Kata laluan baru dan pengesahan tidak sepadan.';err.style.display='flex';return;}
+  if(baru.length<6){err.textContent='Kata laluan mestilah sekurang-kurangnya 6 aksara.';err.style.display='flex';return;}
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Menyimpan...';
+  try{
+    const res=await fetch('/api/admin/tukar-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password_lama:lama,password_baru:baru,password_sahkan:sahkan})});
+    const d=await res.json();
+    if(d.success){ok.style.display='flex';document.getElementById('passLama').value='';document.getElementById('passBaru').value='';document.getElementById('passSahkan').value='';showToast('✅ Kata laluan berjaya ditukar');setTimeout(()=>logoutAdmin(),2500);}
+    else{err.textContent=d.error||'Gagal menukar kata laluan.';err.style.display='flex';}
+  }catch(e){err.textContent='Tidak dapat sambung ke server.';err.style.display='flex';}
+  btn.disabled=false;btn.innerHTML='<i class="ti ti-lock"></i> Tukar Kata Laluan';
+}
+
+function bukaModal(id){document.getElementById(id).classList.add('show');}
+function tutupModal(id){document.getElementById(id).classList.remove('show');}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+document.querySelectorAll('.modal-bg').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');});});
+</script>
+</body>
+</html>
